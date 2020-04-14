@@ -9,20 +9,13 @@ from Population import Population
 from SimpleObjects import Position, DiseaseStage
 import Virus
 
-import numpy as np
-import matplotlib.pyplot as plt
+from SimulationViewer import SimulationViewer
 
 
-def disease_stage_to_color(disease_stage):
-    if disease_stage == DiseaseStage.infected:
-        return 'tab:orange'
-    elif disease_stage == DiseaseStage.susceptible:
-        return 'b'
-    elif disease_stage == DiseaseStage.recovered:
-        return 'g'
-    elif disease_stage == DiseaseStage.deceased:
-        return 'k'
+import cProfile
 
+pr = cProfile.Profile()
+pr.enable()
 
 # create an environment
 
@@ -44,29 +37,37 @@ population = Population(people)
 
 # create a virus, put it into population
 covid = Virus.covid
-population.people[0].virus = covid
-population.people[0].disease_stage = DiseaseStage.infected
+population.people[0].get_infected(covid)
 
 # run behaviors, plot
-# plt.ion()
-fig, ax = plt.subplots()
-disease_stage = [p.disease_stage for p in population.people]
-colors = list(map(disease_stage_to_color, disease_stage))
-sc = ax.scatter(x=[p.position.x for p in population.people], y=[p.position.y for p in population.people], c=colors)
-plt.xlim([world.min_x, world.max_x])
-plt.ylim([world.min_y, world.max_y])
 
-plt.draw()
-for timestep in range(1000):
+# initialize graphics
+graphics = SimulationViewer(world, population)
+
+susceptible_and_infected = []
+infected = []
+recovered = []
+all_but_deceased = []
+
+timestep = 1
+while True:
     population.spread_disease()
     population.behave()
-    x, y = [p.position.x for p in population.people], [p.position.y for p in population.people]
-    sc.set_offsets(np.c_[x, y])
-    disease_stage = [p.disease_stage for p in population.people]
-    sc.set_facecolor(list(map(disease_stage_to_color, disease_stage)))
-    plt.title(timestep)
-    fig.canvas.draw_idle()
-    plt.pause(0.01)
+    # update population view
+    graphics.update_population_view(population, timestep)
 
-plt.waitforbuttonpress()
+    # update progress chart
+    stats = population.calculate_stats()
+    susceptible_and_infected.append(stats[DiseaseStage.susceptible] + stats[DiseaseStage.infected])
+    infected.append(stats[DiseaseStage.infected])
+    all_but_deceased.append(population.size - stats[DiseaseStage.deceased])
+    graphics.update_progress_chart(infected, susceptible_and_infected, all_but_deceased, population.size)
 
+    if stats[DiseaseStage.infected] == 0:  # eradicated
+        break
+    timestep += 1
+    print(timestep)
+
+pr.disable()
+# after your program ends
+pr.print_stats(sort="tottime")
